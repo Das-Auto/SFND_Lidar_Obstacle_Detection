@@ -47,11 +47,11 @@ void CityBlock(pcl::visualization::PCLVisualizer::Ptr &viewer, ProcessPointCloud
     filterCloud = pointProcessorI->FilterCloud(inputCloud, 0.3f, Eigen::Vector4f(-7, -5, -3, 1), Eigen::Vector4f(12, 7, 5, 1));
 
     // TODO: replace filtering with your RANSAC
-    std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentCloud = pointProcessorI->SegmentPlane(filterCloud, 100, 0.2);
+    std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentCloud = pointProcessorI->SegmentPlane(filterCloud, 70, 0.2);
     renderPointCloud(viewer, segmentCloud.first, "obstacles", Color(1, 0, 1));
     renderPointCloud(viewer, segmentCloud.second, "plane", Color(0, 1, 0));
 
-
+    //cout << "New Frame"<< endl;
     pcl::PointCloud<pcl::PointXYZI>::Ptr diff(new pcl::PointCloud<pcl::PointXYZI>());
 
     for (int i=0; i<= segmentCloud.first->points.size(); i++){
@@ -89,6 +89,7 @@ void CityBlock(pcl::visualization::PCLVisualizer::Ptr &viewer, ProcessPointCloud
         if (RENDERBOX)
         {
             Box box = pointProcessorI->BoundingBox(cluster);
+            //cout<< box.x_min << " " << box.y_min << " " << box.z_min << " " << box.x_max << " " << box.y_max << " " << box.z_max<< endl;
             renderBox(viewer, box, clusterId);
         }
     }
@@ -223,7 +224,7 @@ int main(int argc, char **argv)
     pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
     CameraAngle setAngle = FPS;
     initCamera(setAngle, viewer);
-    //cityBlock(viewer);
+    
     //simpleHighway(viewer);
 
     // //project caller
