@@ -15,16 +15,16 @@
 #include <chrono>
 
 #define RENDERBOX true
-#define VIEW false
+#define VIEW true
 
 std::vector<Box> CityBlock(pcl::visualization::PCLVisualizer::Ptr &viewer, ProcessPointClouds<pcl::PointXYZI> *pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr &inputCloud)
 {
 
     pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud(new pcl::PointCloud<pcl::PointXYZI>);
     filterCloud = pointProcessorI->FilterCloud(inputCloud, 0.3f, Eigen::Vector4f(-7, -5, -3, 1), Eigen::Vector4f(12, 7, 5, 1));
-
+    renderPointCloud(viewer, filterCloud, "obstacles", Color(1, 0, 1));
     // TODO: replace filtering with your RANSAC
-    std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentCloud = pointProcessorI->SegmentPlane(filterCloud, 100, 0.2);
+    std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentCloud = pointProcessorI->SegmentPlane(filterCloud, 50, 0.5);
     if (VIEW)
     {
         renderPointCloud(viewer, segmentCloud.first, "obstacles", Color(1, 0, 1));
@@ -78,11 +78,12 @@ std::vector<Box> CityBlock(pcl::visualization::PCLVisualizer::Ptr &viewer, Proce
     return boxes;
 }
 
-std::vector<Box>PlainCityBlock(ProcessPointClouds<pcl::PointXYZI> *pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr &inputCloud)
+std::vector<Box> PlainCityBlock(ProcessPointClouds<pcl::PointXYZI> *pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr &inputCloud)
 {
 
     pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud(new pcl::PointCloud<pcl::PointXYZI>);
-    filterCloud = pointProcessorI->FilterCloud(inputCloud, 0.3f, Eigen::Vector4f(-7, -5, -3, 1), Eigen::Vector4f(12, 7, 5, 1));
+    filterCloud = pointProcessorI->FilterCloud(inputCloud, 0.1f, Eigen::Vector4f(-7, -5, -3, 1), Eigen::Vector4f(12, 7, 100, 1));
+    //filterCloud = pointProcessorI->FilterCloud(inputCloud, 0.3f, Eigen::Vector4f(-7, -5, -3, 1), Eigen::Vector4f(12, 7, 5, 1));
 
     // TODO: replace filtering with your RANSAC
     std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentCloud = pointProcessorI->SegmentPlane(filterCloud, 100, 0.2);
@@ -130,7 +131,6 @@ std::vector<Box>PlainCityBlock(ProcessPointClouds<pcl::PointXYZI> *pointProcesso
     return boxes;
 }
 
-
 float getAverage(float a, float b)
 {
     return (a + b) / 2;
@@ -170,29 +170,33 @@ int main(int argc, char **argv)
 {
     std::cout << "starting enviroment" << std::endl;
 
-    if (VIEW) pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+    //pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
     CameraAngle setAngle = FPS;
     //initCamera(setAngle, viewer);
 
     // //project caller
     ProcessPointClouds<pcl::PointXYZI> *pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
-    std::vector<boost::filesystem::path> stream = pointProcessorI->streamPcd("../src/sensors/data/pcd/data_1");
+    std::vector<boost::filesystem::path> stream = pointProcessorI->streamPcd("../src/sensors/data/pcd/data_4");
     auto streamIterator = stream.begin();
     pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloudI;
     float x, y;
 
     // while (!viewer->wasStopped())
-    
+
     // this condition can be controlled later by ROS
+
     while (true)
     {
         auto t_start = std::chrono::high_resolution_clock::now();
 
+        // viewer->removeAllPointClouds();
+        // viewer->removeAllShapes();
+
         // if (VIEW)
         // {
         //     // Clear viewer
-        //     viewer->removeAllPointClouds();
-        //     viewer->removeAllShapes();
+        // viewer->removeAllPointClouds();
+        // viewer->removeAllShapes();
         // }
         // Load pcd and run obstacle detection process
         inputCloudI = pointProcessorI->loadPcd((*streamIterator).string());
@@ -202,24 +206,28 @@ int main(int argc, char **argv)
         // }else{
         std::vector<Box> frame = PlainCityBlock(pointProcessorI, inputCloudI);
 
-        // to be sent to ROS
+        //std::vector<Box> frame = CityBlock(viewer, pointProcessorI, inputCloudI);
+
+        // // to be sent to ROS
         for (auto i : frame)
         {
             // float points (the centre) that are sent to ROS
             x = getAverage(i.x_min, i.x_max);
             y = getAverage(i.y_min, i.y_max);
-            //cout << x << " , " << y;
+            cout<< i.x_min - i.x_max << i.y_min - i.y_max << endl;
+            //cout << x << " , " << y << "||";
         }
 
-        //cout << endl;
+
+        cout << endl;
 
         streamIterator++;
         if (streamIterator == stream.end())
             streamIterator = stream.begin();
 
         // if (VIEW) viewer->spinOnce();
-        auto t_end = std::chrono::high_resolution_clock::now();
-        double elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
-        cout << elapsed_time_ms << endl;
+        // auto t_end = std::chrono::high_resolution_clock::now();
+        // double elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+        // cout << elapsed_time_ms << endl;
     }
 }
