@@ -14,8 +14,24 @@
 
 #include <chrono>
 
+#include "rclcpp/rclcpp.hpp"
+// #include "std_msgs/msg/string.hpp"
+#include "lidar_message_interface/msg/lidar_point.hpp"
+#include "lidar_message_interface/msg/message_object.hpp"
+
 #define RENDERBOX true
 #define VIEW false
+
+using namespace std::chrono_literals;
+
+std::shared_ptr<rclcpp::Node> node;
+rclcpp::Publisher<lidar_message_interface::msg::MessageObject>::SharedPtr publisher_;
+int sec_interval = 10;
+size_t count_ = 0;
+ProcessPointClouds<pcl::PointXYZI> *pointProcessorI;
+pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloudI;
+std::vector<boost::filesystem::path> stream;
+std::vector<boost::filesystem::path>::iterator streamIterator;
 
 std::vector<Box> CityBlock(pcl::visualization::PCLVisualizer::Ptr &viewer, ProcessPointClouds<pcl::PointXYZI> *pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr &inputCloud)
 {
@@ -78,7 +94,7 @@ std::vector<Box> CityBlock(pcl::visualization::PCLVisualizer::Ptr &viewer, Proce
     return boxes;
 }
 
-std::vector<Box>PlainCityBlock(ProcessPointClouds<pcl::PointXYZI> *pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr &inputCloud)
+std::vector<Box> PlainCityBlock(ProcessPointClouds<pcl::PointXYZI> *pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr &inputCloud)
 {
 
     pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud(new pcl::PointCloud<pcl::PointXYZI>);
@@ -130,7 +146,6 @@ std::vector<Box>PlainCityBlock(ProcessPointClouds<pcl::PointXYZI> *pointProcesso
     return boxes;
 }
 
-
 float getAverage(float a, float b)
 {
     return (a + b) / 2;
@@ -166,60 +181,85 @@ void initCamera(CameraAngle setAngle, pcl::visualization::PCLVisualizer::Ptr &vi
         viewer->addCoordinateSystem(1.0);
 }
 
+void loop()
+{
+
+    inputCloudI = pointProcessorI->loadPcd((*streamIterator).string());
+    std::vector<Box> frame = PlainCityBlock(pointProcessorI, inputCloudI);
+    int n = 0;
+    // float x, y;
+    auto message = lidar_message_interface::msg::MessageObject();
+    // to be sent to ROS
+    for (auto i : frame)
+    {
+        auto point = lidar_message_interface::msg::LidarPoint();
+        // float points (the centre) that are sent to ROS
+        point.x = getAverage(i.x_min, i.x_max);
+        point.y = getAverage(i.y_min, i.y_max);
+        // point.x = x;
+        // point.y = y;
+        // std::cout << x << " , " << y;
+        message.points.push_back(point);
+        n++;
+    }
+    message.number_of_points = n ;
+
+    streamIterator++;
+    if (streamIterator == stream.end())
+        streamIterator = stream.begin();
+
+    // auto message = std_msgs::msg::String();
+    // message.data = "Hello, world!  " + std::to_string(count_++);
+    RCLCPP_INFO(node->get_logger(), "Publishing: '%d' boxes", message.number_of_points);
+    publisher_->publish(message);
+}
+
 int main(int argc, char **argv)
 {
     std::cout << "starting enviroment" << std::endl;
 
-    if (VIEW) pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+    if (VIEW)
+        pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
     CameraAngle setAngle = FPS;
     //initCamera(setAngle, viewer);
 
     // //project caller
-    ProcessPointClouds<pcl::PointXYZI> *pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
-    std::vector<boost::filesystem::path> stream = pointProcessorI->streamPcd("../src/sensors/data/pcd/data_1");
-    auto streamIterator = stream.begin();
-    pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloudI;
-    float x, y;
-
+    pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
+    stream = pointProcessorI->streamPcd("../src/sensors/data/pcd/data_1");
+    streamIterator = stream.begin();
     // while (!viewer->wasStopped())
-    
+
     // this condition can be controlled later by ROS
-    while (true)
-    {
-        auto t_start = std::chrono::high_resolution_clock::now();
+    // while (true)
+    // {
+    //     auto t_start = std::chrono::high_resolution_clock::now();
 
-        // if (VIEW)
-        // {
-        //     // Clear viewer
-        //     viewer->removeAllPointClouds();
-        //     viewer->removeAllShapes();
-        // }
-        // Load pcd and run obstacle detection process
-        inputCloudI = pointProcessorI->loadPcd((*streamIterator).string());
-        // run the main function that perform clustering
-        // if(VIEW){
-        //     std::vector<Box> frame = CityBlock(viewer, pointProcessorI, inputCloudI);
-        // }else{
-        std::vector<Box> frame = PlainCityBlock(pointProcessorI, inputCloudI);
+    //     // if (VIEW)
+    //     // {
+    //     //     // Clear viewer
+    //     //     viewer->removeAllPointClouds();
+    //     //     viewer->removeAllShapes();
+    //     // }
+    //     // Load pcd and run obstacle detection process
+    //     // run the main function that perform clustering
+    //     // if(VIEW){
+    //     //     std::vector<Box> frame = CityBlock(viewer, pointProcessorI, inputCloudI);
+    //     // }else{
+    //     //cout << endl;
 
-        // to be sent to ROS
-        for (auto i : frame)
-        {
-            // float points (the centre) that are sent to ROS
-            x = getAverage(i.x_min, i.x_max);
-            y = getAverage(i.y_min, i.y_max);
-            //cout << x << " , " << y;
-        }
+    //     streamIterator++;
+    //     if (streamIterator == stream.end())
+    //         streamIterator = stream.begin();
 
-        //cout << endl;
-
-        streamIterator++;
-        if (streamIterator == stream.end())
-            streamIterator = stream.begin();
-
-        // if (VIEW) viewer->spinOnce();
-        auto t_end = std::chrono::high_resolution_clock::now();
-        double elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
-        cout << elapsed_time_ms << endl;
-    }
+    //     // if (VIEW) viewer->spinOnce();
+    //     auto t_end = std::chrono::high_resolution_clock::now();
+    //     double elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+    //     cout << elapsed_time_ms << endl;
+    // }
+    rclcpp::init(argc, argv);
+    node = std::make_shared<rclcpp::Node>("lidar_node");
+    publisher_ = node->create_publisher<lidar_message_interface::msg::MessageObject>("lidar_topic", 10);
+    auto timer = node->create_wall_timer(std::chrono::milliseconds(sec_interval), loop);
+    rclcpp::spin(node);
+    rclcpp::shutdown();
 }
